@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel ID差异检测工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .upload-area {
+            border: 2px dashed #d1d5db;
+            transition: all 0.3s ease;
+        }
+        .upload-area.dragover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .file-item {
+            transition: all 0.2s ease;
+        }
+        .file-item:hover {
+            transform: translateX(4px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- 头部 -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Excel ID差异检测工具</h1>
+            <p class="text-gray-600">比较两个文件夹中的Excel文件，找出缺失的ID</p>
+        </div>
+
+        <!-- 文件上传区域 -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <!-- 新表文件夹 -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">新表文件夹</h2>
+                <div class="upload-area rounded-lg p-6 text-center cursor-pointer" 
+                     id="newFilesArea"
+                     ondrop="handleDrop(event, 'new')" 
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)">
+                    <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <p class="text-gray-600">拖拽Excel文件到此处或点击选择</p>
+                    <input type="file" id="newFilesInput" webkitdirectory directory multiple class="hidden">
+                    <input type="file" id="newFilesInputFiles" multiple accept=".xlsx,.xls" class="hidden" onchange="handleFileSelect(event, 'new')">
+                    <div class="mt-2 space-x-2">
+                        <button onclick="document.getElementById('newFilesInput').click()" class="text-blue-500 hover:text-blue-700 text-sm">选择文件夹</button>
+                        <span class="text-gray-400">或</span>
+                        <button onclick="document.getElementById('newFilesInputFiles').click()" class="text-blue-500 hover:text-blue-700 text-sm">选择文件</button>
+                    </div>
+                </div>
+                <div id="newFilesCount" class="mt-4 text-sm text-gray-600"></div>
+            </div>
+
+            <!-- 旧表文件夹 -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">旧表文件夹</h2>
+                <div class="upload-area rounded-lg p-6 text-center cursor-pointer" 
+                     id="oldFilesArea"
+                     ondrop="handleDrop(event, 'old')" 
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)">
+                    <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <p class="text-gray-600">拖拽Excel文件到此处或点击选择</p>
+                    <input type="file" id="oldFilesInput" webkitdirectory directory multiple class="hidden">
+                    <input type="file" id="oldFilesInputFiles" multiple accept=".xlsx,.xls" class="hidden" onchange="handleFileSelect(event, 'old')">
+                    <div class="mt-2 space-x-2">
+                        <button onclick="document.getElementById('oldFilesInput').click()" class="text-blue-500 hover:text-blue-700 text-sm">选择文件夹</button>
+                        <span class="text-gray-400">或</span>
+                        <button onclick="document.getElementById('oldFilesInputFiles').click()" class="text-blue-500 hover:text-blue-700 text-sm">选择文件</button>
+                    </div>
+                </div>
+                <div id="oldFilesCount" class="mt-4 text-sm text-gray-600"></div>
+            </div>
+        </div>
+
+        <!-- 目标表格配置 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8" style="display: none;">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">目标表格配置 (可选)</h2>
+            <p class="text-gray-600 mb-4">如果只想检查特定表格，请在下方输入表格名称（每行一个）</p>
+            <textarea id="targetFiles" 
+                      class="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="例如：&#10;表格1.xlsx&#10;表格2.xlsx&#10;..."></textarea>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="text-center mb-8">
+            <button id="analyzeBtn" 
+                    onclick="analyzeFiles()" 
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+                开始分析
+            </button>
+        </div>
+
+        <!-- 结果展示 -->
+        <div id="results" class="hidden space-y-6">
+            <!-- 统计信息 -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">分析结果</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <div class="text-green-700 font-semibold">新增表格</div>
+                        <div id="newCount" class="text-2xl font-bold text-green-800">0</div>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg">
+                        <div class="text-yellow-700 font-semibold">差异表格</div>
+                        <div id="diffCount" class="text-2xl font-bold text-yellow-800">0</div>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="text-blue-700 font-semibold">缺失ID总数</div>
+                        <div id="missingIdCount" class="text-2xl font-bold text-blue-800">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下载按钮 -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-center">
+                    <button onclick="downloadResults()" 
+                            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="inline-block w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        下载Excel报告
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 进度提示 -->
+        <div id="progress" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p class="text-gray-700 font-semibold">正在分析文件...</p>
+                    <p id="progressText" class="text-gray-500 text-sm mt-2">请稍候</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let newFiles = {};
+        let oldFiles = {};
+        let missingIdData = [];
+
+        // 设置点击事件
+        document.getElementById('newFilesInput').addEventListener('change', (e) => handleFileSelect(e, 'new'));
+        document.getElementById('oldFilesInput').addEventListener('change', (e) => handleFileSelect(e, 'old'));
+
+        // 拖拽事件处理
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.target.closest('.upload-area').classList.add('dragover');
+        }
+
+        function handleDragLeave(event) {
+            event.preventDefault();
+            event.target.closest('.upload-area').classList.remove('dragover');
+        }
+
+        function handleDrop(event, type) {
+            event.preventDefault();
+            event.target.closest('.upload-area').classList.remove('dragover');
+            
+            const files = event.dataTransfer.files;
+            processFiles(files, type);
+        }
+
+        function handleFileSelect(event, type) {
+            const files = event.target.files;
+            processFiles(files, type);
+        }
+
+        function processFiles(files, type) {
+            const fileStorage = type === 'new' ? newFiles : oldFiles;
+            const countContainer = document.getElementById(type + 'FilesCount');
+            
+            // 清空现有文件
+            Object.keys(fileStorage).forEach(key => delete fileStorage[key]);
+            
+            let excelCount = 0;
+            for (let file of files) {
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    fileStorage[file.name] = file;
+                    excelCount++;
+                }
+            }
+            
+            updateFileCount(countContainer, excelCount);
+        }
+
+        function updateFileCount(container, count) {
+            container.innerHTML = `已选择 ${count} 个Excel文件`;
+        }
+
+        async function analyzeFiles() {
+            if (Object.keys(newFiles).length === 0 || Object.keys(oldFiles).length === 0) {
+                alert('请先上传新表和旧表文件！');
+                return;
+            }
+
+            document.getElementById('progress').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+            
+            try {
+                await performAnalysis();
+            } catch (error) {
+                console.error('分析过程中出错:', error);
+                alert('分析过程中出错，请检查文件格式是否正确！');
+            } finally {
+                document.getElementById('progress').classList.add('hidden');
+            }
+        }
+
+        async function performAnalysis() {
+            const newFileNames = Object.keys(newFiles);
+            const oldFileNames = Object.keys(oldFiles);
+            
+            // 获取目标文件列表
+            const targetFilesText = document.getElementById('targetFiles').value.trim();
+            let targetFiles = [];
+            if (targetFilesText) {
+                targetFiles = targetFilesText.split('\n').map(name => name.trim()).filter(name => name);
+            }
+
+            // 统计新增、缺失、差异文件
+            const newCount = newFileNames.filter(name => !oldFileNames.includes(name)).length;
+            const missCount = oldFileNames.filter(name => !newFileNames.includes(name)).length;
+            
+            // 确定要分析的文件
+            let filesToAnalyze = [];
+            if (targetFiles.length > 0) {
+                filesToAnalyze = targetFiles.filter(name => newFileNames.includes(name) && oldFileNames.includes(name));
+            } else {
+                filesToAnalyze = newFileNames.filter(name => oldFileNames.includes(name));
+            }
+
+            missingIdData = [];
+            
+            // 分析每个文件
+            for (let i = 0; i < filesToAnalyze.length; i++) {
+                const fileName = filesToAnalyze[i];
+                document.getElementById('progressText').textContent = `正在分析: ${fileName} (${i + 1}/${filesToAnalyze.length})`;
+                
+                try {
+                    const newIds = await getExcelIds(newFiles[fileName]);
+                    const oldIds = await getExcelIds(oldFiles[fileName]);
+                    
+                    // 找出缺失的ID
+                    const missingIds = oldIds.filter(id => !newIds.includes(id));
+                    
+                    for (let missingId of missingIds) {
+                        missingIdData.push({
+                            fileName: fileName.replace('.xlsx', '').replace('.xls', ''),
+                            missingId: missingId
+                        });
+                    }
+                } catch (error) {
+                    console.error(`分析文件 ${fileName} 时出错:`, error);
+                }
+            }
+
+            // 显示结果
+            document.getElementById('newCount').textContent = newCount;
+            document.getElementById('diffCount').textContent = filesToAnalyze.length;
+            document.getElementById('missingIdCount').textContent = missingIdData.length;
+            
+            document.getElementById('results').classList.remove('hidden');
+        }
+
+        async function getExcelIds(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const ids = [];
+                        
+                        for (let sheetName of workbook.SheetNames) {
+                            if (sheetName.startsWith('$')) continue;
+                            
+                            const worksheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            
+                            // 跳过前6行（header=5表示从第6行开始）
+                            if (jsonData.length > 6) {
+                                let startIndex = -1;
+                                let endIndex = -1;
+                                
+                                // 找到Start和End行
+                                for (let i = 6; i < jsonData.length; i++) {
+                                    if (jsonData[i] && jsonData[i][0] === 'Start') {
+                                        startIndex = i;
+                                    }
+                                    if (jsonData[i] && jsonData[i][0] === 'End') {
+                                        endIndex = i;
+                                        break;
+                                    }
+                                }
+                                
+                                // 提取Start到End之间的ID
+                                if (startIndex !== -1 && endIndex !== -1) {
+                                    for (let i = startIndex; i <= endIndex; i++) {
+                                        if (jsonData[i] && jsonData[i][1] !== undefined && jsonData[i][1] !== null) {
+                                            ids.push(jsonData[i][1]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        resolve(ids);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function downloadResults() {
+            if (missingIdData.length === 0) {
+                alert('没有数据可下载！');
+                return;
+            }
+
+            // 创建Excel工作簿
+            const ws = XLSX.utils.json_to_sheet(missingIdData.map(item => ({
+                '表格名': item.fileName,
+                '缺失Id': item.missingId
+            })));
+            
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '缺失ID');
+            
+            // 下载文件
+            const today = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `${today}缺失id.xlsx`);
+        }
+    </script>
+</body>
+</html>
