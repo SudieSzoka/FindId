@@ -153,7 +153,7 @@
         <div id="results" class="hidden space-y-6">
             <div class="rounded-xl bg-white p-6 shadow-sm">
                 <h2 class="mb-4 text-xl font-semibold text-slate-800">分析结果</h2>
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
                     <div class="rounded-xl bg-slate-100 p-4">
                         <div class="text-sm font-medium text-slate-600">处理表格</div>
                         <div id="processedTableCount" class="mt-2 text-2xl font-bold text-slate-900">0</div>
@@ -161,6 +161,10 @@
                     <div class="rounded-xl bg-emerald-50 p-4">
                         <div class="text-sm font-medium text-emerald-700">新增表格</div>
                         <div id="newTableCount" class="mt-2 text-2xl font-bold text-emerald-800">0</div>
+                    </div>
+                    <div class="rounded-xl bg-violet-50 p-4">
+                        <div class="text-sm font-medium text-violet-700">缺失表格</div>
+                        <div id="missingTableCount" class="mt-2 text-2xl font-bold text-violet-800">0</div>
                     </div>
                     <div class="rounded-xl bg-blue-50 p-4">
                         <div class="text-sm font-medium text-blue-700">缺失 ID</div>
@@ -226,6 +230,7 @@
             return {
                 processedTables: 0,
                 newTables: [],
+                missingTables: [],
                 missingIds: [],
                 newIds: [],
                 newFields: [],
@@ -378,6 +383,13 @@
 
             analysisResult.newTables = filteredNewFileNames
                 .filter((fileName) => !oldFileNameSet.has(fileName))
+                .map((fileName) => ({
+                    '表格名': stripExtension(fileName)
+                }));
+
+            const newFileNameSet = new Set(filteredNewFileNames);
+            analysisResult.missingTables = filteredOldFileNames
+                .filter((fileName) => !newFileNameSet.has(fileName))
                 .map((fileName) => ({
                     '表格名': stripExtension(fileName)
                 }));
@@ -665,6 +677,7 @@
         function updateResultStats() {
             document.getElementById('processedTableCount').textContent = analysisResult.processedTables;
             document.getElementById('newTableCount').textContent = analysisResult.newTables.length;
+            document.getElementById('missingTableCount').textContent = analysisResult.missingTables.length;
             document.getElementById('missingIdCount').textContent = analysisResult.missingIds.length;
             document.getElementById('newIdCount').textContent = analysisResult.newIds.length;
             document.getElementById('newFieldCount').textContent = analysisResult.newFields.length;
@@ -676,6 +689,7 @@
             let hasData = false;
 
             hasData = appendSheetIfHasData(workbook, analysisResult.newTables, '新增表格') || hasData;
+            hasData = appendSheetIfHasData(workbook, analysisResult.missingTables, '缺失表格') || hasData;
             hasData = appendSheetIfHasData(workbook, analysisResult.missingIds, '缺失ID') || hasData;
             hasData = appendSheetIfHasData(workbook, analysisResult.newIds, '新增ID') || hasData;
             hasData = appendSheetIfHasData(workbook, analysisResult.newFields, '新增字段') || hasData;
